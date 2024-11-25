@@ -1,3 +1,4 @@
+from typing import List
 from sensor_msgs.msg import CameraInfo
 from geometry_msgs.msg import Quaternion
 from validate import *
