@@ -33,50 +33,44 @@ class Sensor:
     else:
       self.imageDepth = image
     self.cameraInfo = cameraInfo
-class Description2D:
+class BoundingBox2D:
   def __init__(self, 
                center: Center = Center(), 
                size: Size = Size(), 
-               maxSize: Vector3 = Vector3(), 
-               label: str = "", 
-               score: float = 0.0):
+               maxSize: Vector3 = Vector3()):
     self.center: Center = center
     self.size: Size = size
     self.maxSize: Vector3 = maxSize
-    self.label: str = label
-    self.score: float = score
 
 class Box:
   def __init__(self, 
                center: Center = Center(), 
                orientation: Quaternion = Quaternion(), 
-               size: Size = Size(), 
-               color: Color = Color()):
+               size: Size = Size()):
     self.center: Center = center
     self.orientation: Quaternion = orientation
     self.size: Size = size
-    self.color: Color = color
 
-class Description3D:
+class BoundingBox3D:
   def __init__(self, 
-               description2D: Description2D = Description2D(), 
+               boundingBox2D: BoundingBox2D = BoundingBox2D(), 
                box: Box = Box()):
-    self.description2D: Description2D = description2D
+    self.boundingBox2D: BoundingBox2D = boundingBox2D
     self.box: Box = box
 
   def __setData(self,
-                description2D: Description2D, 
+                boundingBox2D: BoundingBox2D, 
                 box: Box):
-    self.description2D = description2D
+    self.boundingBox2D = boundingBox2D
     self.box = box
   
 class Data:
   def __init__(self, 
                sensor: Sensor = Sensor(), 
-               description2D: Description2D = Description2D()):
+               boundingBox2D: BoundingBox2D = BoundingBox2D()):
     self.sensor: Sensor = sensor
-    self.description2D: Description2D = description2D
+    self.boundingBox2D: BoundingBox2D = boundingBox2D
 
-  def __setData(self, description2D: Description2D, image: Union[Image, np.ndarray], cameraInfo: CameraInfo):
-        self.description2D = description2D
+  def __setData(self, boundingBox2D: BoundingBox2D, image: Union[Image, np.ndarray], cameraInfo: CameraInfo):
+        self.boundingBox2D = boundingBox2D
         self.sensor.setSensorData(image, cameraInfo)

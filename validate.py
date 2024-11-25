@@ -1,4 +1,4 @@
-from interface import Center, Size
+from interface import Center, Size, BoundingBox3D
 import numpy as np
 from sensor_msgs.msg import CameraInfo
 
@@ -25,3 +25,15 @@ class Validate:
         equal = equal and np.all(np.isclose(np.asarray(cameraInfo.K),
                                             np.asarray(currentCameraInfo.K)))
         return equal
+    
+    def __validateBoundingBox3D(self, bbox: BoundingBox3D): 
+        self.__validateCenter(bbox.box.center)
+        self.__validateSize(bbox.box.size)
+        #FINISH THIS VALIDATE METHOD
+    
+    def __validatePolygonVertices(self, vertices):
+        if not isinstance(vertices, list):
+            raise Exception("Vertices must be a list")
+        for vertex in vertices:
+            if not isinstance(vertex, Center):
+                raise Exception("Vertices must be Center objects")
