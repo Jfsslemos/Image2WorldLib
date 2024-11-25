@@ -1,37 +1,38 @@
 from sensor_msgs.msg import CameraInfo
 from geometry_msgs.msg import Quaternion
-from validate import Validate
-from interface import Data, Description3D, Box, Center, Size, Color
+from validate import *
+from interface import *
 import numpy as np
 import open3d as o3d
 import math
+from shapely.geometry import Point, Polygon
 
 class Image2World(Validate):
     def __init__(self):
         super().__init__()
         
         self.currentCameraInfo = None
-        self.lutTable = None
         self.defaultDepth = 0.5 #TODO: Make this value changeble
         self.depthMeanError = 0.05 #TODO: Make this value changeble
         self.fitBox = True # TODO:Make this value changeble
         descriptionProcessingAlgorithms = {
-            "detection": self.__dectectionProcessing,
+            "detection": self.boundingBoxProcessing,
         }
 
-    def __pointCloudProcessing(self):
+    def __pointCloudProcessing(self, data: Data):
         print("point cloud processing not implemented yet")
-        pass
+        raise Exception("point cloud processing not implemented yet")
 
     def __imageDepthProcessing(self, data: Data):
-        data.sensor.setSensorData(cameraInfo=data.sensor.cameraInfo, image=data.sensor.imageDepth)
+        imageDepth = data.sensor.imageDepth
+        data.sensor.setSensorData(cameraInfo=data.sensor.cameraInfo, imageDepth=data.sensor.imageDepth)
 
         imageDepth = data.sensor.imageDepth
         cameraInfo = data.sensor.cameraInfo
         height, width = imageDepth.shape
 
-        bboxLimits = [int(data.description2D.center.x - data.description2D.size.width/2), int(data.description2D.center.x + data.description2D.size.width/2), 
-                       int(data.description2D.size.height - data.description2D.size.height/2), int(data.description2D.center.y + data.description2D.size.height/2)]
+        bboxLimits = [int(data.boundingBox2D.center.x - data.boundingBox2D.size.width/2), int(data.boundingBox2D.center.x + data.boundingBox2D.size.width/2), 
+                       int(data.boundingBox2D.size.height - data.boundingBox2D.size.height/2), int(data.boundingBox2D.center.y + data.boundingBox2D.size.height/2)]
         
         bboxLimits[0] = bboxLimits[0] if bboxLimits[0] > 0 else 0
         bboxLimits[1] = bboxLimits[1] if bboxLimits[1] < width else width - 1
@@ -40,16 +41,16 @@ class Image2World(Validate):
         self.__mountLutTable(cameraInfo) #TODO: Implement this method
 
                 
-        centerDepth = imageDepth[int(data.description2D.center.y)][int(data.description2D.center.x)]
-        self.__validateCenterDepth(centerDepth)
+        centerDepth = imageDepth[int(data.boundingBox2D.center.y)][int(data.boundingBox2D.center.x)]
+        self._validateCenterDepth(centerDepth)
         
         centerDepth/= 1000.
         limits = np.asarray([(bboxLimits[0], bboxLimits[2]), (bboxLimits[1], bboxLimits[3])])
         vertices3D = np.zeros((len(limits), 3))
 
-        vertices3D[:, :2] = self.lut_table[limits[:, 1], limits[:, 0], :]*centerDepth
+        vertices3D[:, :2] = self.lutTable[limits[:, 1], limits[:, 0], :]*centerDepth
         vertices3D[:, 2] = centerDepth
-        maxSizeMessage = data.description2D.maxSize
+        maxSizeMessage = data.boundingBox2D.maxSize
         maxSizeVector = np.array([maxSizeMessage.x, maxSizeMessage.y, maxSizeMessage.z])
         descriptionDepth = self.defaultDepth
         if np.any(maxSizeVector == np.zeros(3)):
@@ -75,7 +76,7 @@ class Image2World(Validate):
 
             if self.fitBox:
                 boxDepths = imageDepth[limits[0, 1]:limits[1, 1], limits[0, 0]:limits[1, 0]]/1000.
-                boxLut = self.lut_table[limits[0, 1]:limits[1, 1], limits[0, 0]:limits[1, 0], :]
+                boxLut = self.lutTable[limits[0, 1]:limits[1, 1], limits[0, 0]:limits[1, 0], :]
 
                 boxPoints = np.zeros((boxDepths.size, 3))
 
@@ -104,34 +105,32 @@ class Image2World(Validate):
             boxCenter = box.get_center()
             boxSize = box.get_max_bound() - box.get_min_bound()
             boxRotation = np.eye(4,4)
-            boxOrientation = self.quaternionFromMatrix(boxRotation)
+            boxOrientation = self.__quaternionFromMatrix(boxRotation)
             boxSize = np.dot(boxSize, boxRotation[:3, :3])
 
-            description3d = Description3D()
+            boundingBox3D = BoundingBox3D()
 
-            description2D = data.description2D,
+            boundingBox2D = data.boundingBox2D,
             box = Box(
-                    center = Center(x=boxCenter[0], y=boxCenter[1], z=boxCenter[2]),
+                    center = Center3D(x=boxCenter[0], y=boxCenter[1], z=boxCenter[2]),
                     orientation = Quaternion(x=boxOrientation[0], y=boxOrientation[1], z=boxOrientation[2], w=boxOrientation[3]),
-                    size = Size(width=boxSize[0], height=boxSize[1], depth=boxSize[2]),
-                    color = Color(r=meanColor[0], g=meanColor[1], b=meanColor[2])
-                )
-            description3d.__setData(description2D[0], box)
+                    size = Size(width=boxSize[0], height=boxSize[1], depth=boxSize[2]))
+            boundingBox3D._setData(boundingBox2D[0], box)
 
  
-        return description3d
+        return boundingBox3D
     
-    # def __recognitions3DConcatenate(self, array_point_cloud, descriptions2d, recog_header, header):
-    #     output_data = [Description3D()]
+    # 'def __recognitions3DConcatenate(self, array_point_cloud, descriptions2d, recog_header, header):
+    #     output_data = [BoundingBox3D()]
 
     #     descriptions3d = [None]*len(descriptions2d)
     #     for i, d in enumerate(descriptions2d):
-    #         descriptions3d[i] = self.__createDescription3D(array_point_cloud, d, header)
+    #         descriptions3d[i] = self.__createBoundingBox3D(array_point_cloud, d, header)
 
     #     output_data.descriptions = [d3 for d3 in descriptions3d if d3 is not None]
-    #     return output_data
+    #     return output_data'
 
-    def quaternionFromMatrix(self, matrix: np.ndarray):
+    def __quaternionFromMatrix(self, matrix: np.ndarray):
         q = np.empty((4, ), dtype=np.float64)
         M = np.array(matrix, dtype=np.float64, copy=False)[:4, :4]
         t = np.trace(M)
@@ -155,9 +154,9 @@ class Image2World(Validate):
         return q
         
     def __mountLutTable(self, cameraInfo: CameraInfo):
-        if self.lut_table is None or (self.currentCameraInfo is not None and not self.__validateCompareCameraInfo(self.currentCameraInfo, cameraInfo)):
+        if self.lutTable is None or (self.currentCameraInfo is not None and not self._validateCompareCameraInfo(self.currentCameraInfo, cameraInfo)):
             self.currentCameraInfo = cameraInfo
-            K = np.asarray(cameraInfo.K).reshape((3,3))
+            K = np.asarray(cameraInfo.k).reshape((3,3))
 
             fx = 1./K[0,0]
             fy = 1./K[1,1]
@@ -169,11 +168,22 @@ class Image2World(Validate):
 
             x_mg, y_mg = np.meshgrid(x_table, y_table)
 
-            self.lut_table = np.concatenate((x_mg[:, :, np.newaxis], y_mg[:, :, np.newaxis]), axis=2)
+            self.lutTable = np.concatenate((x_mg[:, :, np.newaxis], y_mg[:, :, np.newaxis]), axis=2)
 
-    def __dectectionProcessing(self, data: Data):
-        self.__validateCenter(data.description2D.center)
-        self.__validateSize(data.description2D.size)
-        self.__imageDepthProcessing(data)
+    def boundingBoxProcessing(self, data: Data, method: str = "image_depth"):
+        self._validateCenter(data.boundingBox2D.center)
+        self._validateSize(data.boundingBox2D.size)
+        if method == "point_cloud":
+            return self.__pointCloudProcessing(data)
+        elif method == "image_depth":
+            return self.__imageDepthProcessing(data)
+        else:
+            raise Exception("Method not implemented")
+            
     
-    
+    def inPolygonFilter(self, boundingBox3D: BoundingBox3D, polygonVertices: list):
+        self._validateBoundingBox3D(boundingBox3D)
+        self._validatePolygonVertices(polygonVertices)
+        polygon = Polygon(polygonVertices)
+        point = Point(boundingBox3D.box.center.x, boundingBox3D.box.center.y)
+        return polygon.contains(point)
