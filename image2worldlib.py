@@ -16,15 +16,16 @@ class Image2World(Validate):
         self.defaultDepth = 0.5 #TODO: Make this value changeble
         self.depthMeanError = 0.05 #TODO: Make this value changeble
         self.fitBox = True # TODO:Make this value changeble
+        self.lutTable = None
         descriptionProcessingAlgorithms = {
             "detection": self.boundingBoxProcessing,
         }
 
-    def __pointCloudProcessing(self, data: Data):
+    def __pointCloudProcessing(self, data: BoundingBoxProcessingData):
         print("point cloud processing not implemented yet")
         raise Exception("point cloud processing not implemented yet")
 
-    def __imageDepthProcessing(self, data: Data):
+    def __imageDepthProcessing(self, data: BoundingBoxProcessingData):
         imageDepth = data.sensor.imageDepth
         data.sensor.setSensorData(cameraInfo=data.sensor.cameraInfo, imageDepth=data.sensor.imageDepth)
 
@@ -32,8 +33,9 @@ class Image2World(Validate):
         cameraInfo = data.sensor.cameraInfo
         height, width = imageDepth.shape
 
-        bboxLimits = [int(data.boundingBox2D.center.x - data.boundingBox2D.size.width/2), int(data.boundingBox2D.center.x + data.boundingBox2D.size.width/2), 
-                       int(data.boundingBox2D.size.height - data.boundingBox2D.size.height/2), int(data.boundingBox2D.center.y + data.boundingBox2D.size.height/2)]
+        bboxLimits = [int(data.boundingBox2D.center.x - data.boundingBox2D.size_x/2), int(data.boundingBox2D.center.x + data.boundingBox2D.size_x/2), 
+                       int(data.boundingBox2D.size_y - data.boundingBox2D.size_y/2), int(data.boundingBox2D.center.y + data.boundingBox2D.size_y/2)]
+        
         
         bboxLimits[0] = bboxLimits[0] if bboxLimits[0] > 0 else 0
         bboxLimits[1] = bboxLimits[1] if bboxLimits[1] < width else width - 1
@@ -49,9 +51,11 @@ class Image2World(Validate):
         limits = np.asarray([(bboxLimits[0], bboxLimits[2]), (bboxLimits[1], bboxLimits[3])])
         vertices3D = np.zeros((len(limits), 3))
 
+        if self.lutTable is None:
+            raise Exception("Lut table is not defined")
         vertices3D[:, :2] = self.lutTable[limits[:, 1], limits[:, 0], :]*centerDepth
         vertices3D[:, 2] = centerDepth
-        maxSizeMessage = data.boundingBox2D.maxSize
+        maxSizeMessage = data.maxSize
         maxSizeVector = np.array([maxSizeMessage.x, maxSizeMessage.y, maxSizeMessage.z])
         descriptionDepth = self.defaultDepth
         if np.any(maxSizeVector == np.zeros(3)):
@@ -110,15 +114,17 @@ class Image2World(Validate):
             boxSize = np.dot(boxSize, boxRotation[:3, :3])
 
             boundingBox3D = BoundingBox3D()
+            boundingBox3D.center.position.x = boxCenter[0]
+            boundingBox3D.center.position.y = boxCenter[1]
+            boundingBox3D.center.position.z = boxCenter[2]
+            boundingBox3D.center.orientation.x = boxOrientation[0]
+            boundingBox3D.center.orientation.y = boxOrientation[1]
+            boundingBox3D.center.orientation.z = boxOrientation[2]
+            boundingBox3D.center.orientation.w = boxOrientation[3]
+            boundingBox3D.size.x = boxSize[0]
+            boundingBox3D.size.y = boxSize[1]
+            boundingBox3D.size.z = boxSize[2]
 
-            boundingBox2D = data.boundingBox2D,
-            box = Box(
-                    center = Center3D(x=boxCenter[0], y=boxCenter[1], z=boxCenter[2]),
-                    orientation = Quaternion(x=boxOrientation[0], y=boxOrientation[1], z=boxOrientation[2], w=boxOrientation[3]),
-                    size = Size(width=boxSize[0], height=boxSize[1], depth=boxSize[2]))
-            boundingBox3D._setData(boundingBox2D[0], box)
-
- 
         return boundingBox3D
     
     # 'def __recognitions3DConcatenate(self, array_point_cloud, descriptions2d, recog_header, header):
@@ -171,9 +177,9 @@ class Image2World(Validate):
 
             self.lutTable = np.concatenate((x_mg[:, :, np.newaxis], y_mg[:, :, np.newaxis]), axis=2)
 
-    def boundingBoxProcessing(self, data: Data, method: str = "image_depth"):
+    def boundingBoxProcessing(self, data: BoundingBoxProcessingData, method: str = "image_depth"):
         self._validateCenter(data.boundingBox2D.center)
-        self._validateSize(data.boundingBox2D.size)
+        self._validateSize2D(data.boundingBox2D.size_x, data.boundingBox2D.size_y)
         if method == "point_cloud":
             return self.__pointCloudProcessing(data)
         elif method == "image_depth":
@@ -186,5 +192,5 @@ class Image2World(Validate):
         self._validateBoundingBox3D(boundingBox3D)
         self._validatePolygonVertices(polygonVertices)
         polygon = Polygon(polygonVertices)
-        point = Point(boundingBox3D.box.center.x, boundingBox3D.box.center.y)
+        point = Point(boundingBox3D.center.position.x, boundingBox3D.center.position.y)
         return polygon.contains(point)
