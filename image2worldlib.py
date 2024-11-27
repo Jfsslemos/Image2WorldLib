@@ -1,8 +1,8 @@
 from typing import List
 from sensor_msgs.msg import CameraInfo
 from geometry_msgs.msg import Quaternion
-from validate import *
-from interface import *
+from .validate import *
+from .interface import *
 import numpy as np
 import open3d as o3d
 import math

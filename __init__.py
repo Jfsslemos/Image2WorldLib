@@ -1,2 +1,2 @@
-from validate import Validate
-from interface import BoundingBoxProcessingData
+from .validate import Validate
+from .interface import BoundingBoxProcessingData

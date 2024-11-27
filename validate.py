@@ -1,4 +1,4 @@
-from interface import *
+from .interface import *
 import numpy as np
 from sensor_msgs.msg import CameraInfo
 
