@@ -1,6 +1,6 @@
 from sensor_msgs.msg import Image, CameraInfo
-from geometry_msgs.msg import Vector3, Quaternion, Pose, Pose2D
-from vision_msgs.msg import BoundingBox2D, BoundingBox3D
+from geometry_msgs.msg import Vector3, Quaternion, Pose
+from vision_msgs.msg import BoundingBox2D, BoundingBox3D, Pose2D
 from std_msgs.msg import ColorRGBA
 from cv_bridge import CvBridge
 from typing import Union
