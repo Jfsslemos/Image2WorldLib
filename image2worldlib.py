@@ -30,27 +30,27 @@ def __imageDepthProcessing(data: BoundingBoxProcessingData):
     cameraInfo = data.sensor.cameraInfo
     height, width = imageDepth.shape
 
-    bboxLimits = [int(data.boundingBox2D.center.position.x - data.boundingBox2D.size_x/2), int(data.boundingBox2D.center.position.x + data.boundingBox2D.size_x/2), 
+    bboxLimits = [int(data.boundingBox2D.center.position.x - data.boundingBox2D.size_x/2), int(data.boundingBox2D.center.position.x + data.boundingBox2D.size_x/2),
                     int(data.boundingBox2D.size_y - data.boundingBox2D.size_y/2), int(data.boundingBox2D.center.position.y + data.boundingBox2D.size_y/2)]
-    
-    
+
+
     bboxLimits[0] = bboxLimits[0] if bboxLimits[0] > 0 else 0
     bboxLimits[1] = bboxLimits[1] if bboxLimits[1] < width else width - 1
     bboxLimits[2] = bboxLimits[2] if bboxLimits[2] > 0 else 0
     bboxLimits[3] = bboxLimits[3] if bboxLimits[3] < height else height - 1
     __mountLutTable(cameraInfo) #TODO: Implement this method
 
-            
+
     centerDepth = imageDepth[int(data.boundingBox2D.center.position.y)][int(data.boundingBox2D.center.position.x)]
     validateCenterDepth(centerDepth)
-    
+
     centerDepth/= 1000.
     limits = np.asarray([(bboxLimits[0], bboxLimits[2]), (bboxLimits[1], bboxLimits[3])])
     vertices3D = np.zeros((len(limits), 3))
 
     if lutTable is None:
         raise Exception("Lut table is not defined")
-    vertices3D[:, :2] = lutTable[limits[:, 1], limits[:, 0], :]*centerDepth
+    vertices3D[:, :2] = lutTable[limits[:, 1]-1, limits[:, 0]-1, :]*centerDepth
     vertices3D[:, 2] = centerDepth
     maxSizeMessage = data.maxSize
     maxSizeVector = np.array([maxSizeMessage.x, maxSizeMessage.y, maxSizeMessage.z])
@@ -59,7 +59,7 @@ def __imageDepthProcessing(data: BoundingBoxProcessingData):
             raise Warning("Max size is not defined")
     else:
         sizeX, sizeY = vertices3D[1, :2] - vertices3D[0, :2]
-        
+
         differenceError1 = (np.abs(maxSizeVector - sizeX)).tolist()
         sortedDifferencesIndex1 = sorted(zip(differenceError1, range(3)))
         differenceError2 = (np.abs(maxSizeVector - sizeY)).tolist()
@@ -89,16 +89,16 @@ def __imageDepthProcessing(data: BoundingBoxProcessingData):
             boxPoints = boxPoints[boxPoints[:, 2] > 0]
             boxPoints = boxPoints[np.logical_and(np.all(boxPoints > minBound, axis=1),
                                                 np.all(boxPoints < maxBound, axis=1))]
-            
+
             boxPcd = o3d.geometry.PointCloud()
             boxPcd.points = o3d.utility.Vector3dVector(boxPoints)
 
             boxPcd, _ = boxPcd.remove_statistical_outlier(20, 2.0)
 
-            # TODO: add a clustering algorithm and pick the closest cluster 
+            # TODO: add a clustering algorithm and pick the closest cluster
 
             box = o3d.geometry.AxisAlignedBoundingBox().create_from_points(boxPcd.points)
-        
+
         else:
             box = o3d.geometry.AxisAlignedBoundingBox(minBound, maxBound)
 
@@ -156,7 +156,7 @@ def __quaternionFromMatrix(matrix: np.ndarray):
         q[3] = M[k, j] - M[j, k]
     q *= 0.5 / math.sqrt(t * M[3, 3])
     return q
-    
+
 def __mountLutTable(cameraInfo: CameraInfo):
     global lutTable, currentCameraInfo
     if lutTable is None or (currentCameraInfo is not None and not validateCompareCameraInfo(currentCameraInfo, cameraInfo)):
@@ -168,7 +168,7 @@ def __mountLutTable(cameraInfo: CameraInfo):
         cx = K[0,2]
         cy = K[1,2]
 
-        x_table = (np.arange(0, currentCameraInfo.width) - cx)*fx 
+        x_table = (np.arange(0, currentCameraInfo.width) - cx)*fx
         y_table = (np.arange(0, currentCameraInfo.height) - cy)*fy
 
         x_mg, y_mg = np.meshgrid(x_table, y_table)
@@ -184,7 +184,51 @@ def boundingBoxProcessing(data: BoundingBoxProcessingData, method: str = "image_
         return __imageDepthProcessing(data)
     else:
         raise Exception("Method not implemented")
-        
+
+def __poseDepthProcessing(data: BoundingBoxProcessingData) -> list:
+
+    points3D = []
+
+    image_depth = data.sensor.imageDepth
+    camera_info = data.sensor.cameraInfo
+
+    global lutTable
+
+    h, w = image_depth.shape
+    for X2D, Y2D, score, id in data.pose:
+            u = int(X2D)
+            v = int(Y2D)
+
+            if u >= w or u < 0 or v >= h or v < 0:
+                score = 0.0
+
+                point3D = [0.0,0.0,0.0, score, id]
+            else:
+                depth = image_depth[v, u]
+
+                if depth <= 0:
+                    score = 0.0
+                    point3D = [0.0,0.0,0.0, score, id]
+
+                else:
+                    depth /= 1000.
+
+                    vertex_3d = np.zeros(3)
+                    vertex_3d[:2] = lutTable[v, u, :]*depth
+                    vertex_3d[2] = depth
+
+                    point3D = [vertex_3d[0],vertex_3d[1],vertex_3d[2], score, id]
+
+            points3D.append(point3D)
+    return points3D
+
+def poseProcessing(data: BoundingBoxProcessingData, method: str = "image_depth") -> np.ndarray:
+    if method == "image_depth":
+        return __poseDepthProcessing(data)
+    else:
+        raise NotImplementedError(f"Method {method} not implementeds")
+    
+
 
 def inPolygonFilter(boundingBox3D: BoundingBox3D, polygonVertices: list):
     validateBoundingBox3D(boundingBox3D)
