@@ -30,8 +30,9 @@ def __imageDepthProcessing(data: BoundingBoxProcessingData):
     cameraInfo = data.sensor.cameraInfo
     height, width = imageDepth.shape
 
-    bboxLimits = [int(data.boundingBox2D.center.position.x - data.boundingBox2D.size_x/2), int(data.boundingBox2D.center.position.x + data.boundingBox2D.size_x/2),
-                    int(data.boundingBox2D.size_y - data.boundingBox2D.size_y/2), int(data.boundingBox2D.center.position.y + data.boundingBox2D.size_y/2)]
+    bboxLimits = [int(data.boundingBox2D.center.position.x - data.boundingBox2D.size_x/2), int(data.boundingBox2D.center.position.x + data.boundingBox2D.size_x/2), 
+                    int(data.boundingBox2D.center.position.y - data.boundingBox2D.size_y/2), int(data.boundingBox2D.center.position.y + data.boundingBox2D.size_y/2)]
+
 
 
     bboxLimits[0] = bboxLimits[0] if bboxLimits[0] > 0 else 0
